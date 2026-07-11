@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>똥 피하기</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(145deg, #14213d, #0d1326 72%);
+      color: #fff;
+      font-family: system-ui, -apple-system, "Noto Sans KR", sans-serif;
+      user-select: none;
+    }
+    .wrap { width: min(92vw, 500px); text-align: center; }
+    h1 { margin: 0 0 12px; font-size: clamp(1.8rem, 6vw, 2.6rem); }
+    .hud { display: flex; justify-content: space-between; margin: 0 4px 10px; font-weight: 800; }
+    #game {
+      position: relative;
+      overflow: hidden;
+      height: min(68vh, 620px);
+      min-height: 390px;
+      border: 4px solid #f6c453;
+      border-radius: 18px;
+      background: linear-gradient(#72c9ff 0 72%, #61b84c 72%);
+      box-shadow: 0 16px 42px #0008;
+      touch-action: none;
+    }
+    #game::before {
+      content: "";
+      position: absolute;
+      inset: 12% 0 28%;
+      opacity: .24;
+      background: repeating-linear-gradient(90deg, transparent 0 44px, #fff 45px 48px, transparent 49px 94px);
+      pointer-events: none;
+    }
+    #player, .dung { position: absolute; line-height: 1; }
+    #player {
+      bottom: 18px;
+      left: 50%;
+      width: 48px;
+      height: 58px;
+      transform: translateX(-50%);
+      font-size: 44px;
+      filter: drop-shadow(0 3px 1px #0006);
+      z-index: 2;
+    }
+    .dung { top: -50px; font-size: 37px; filter: drop-shadow(0 2px 1px #0005); }
+    #message {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: #101a31c9;
+    }
+    #message.hidden { display: none; }
+    .card { max-width: 320px; }
+    .card h2 { margin: 0 0 10px; font-size: 2rem; }
+    .card p { margin: 0 0 18px; line-height: 1.65; }
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 12px 18px;
+      background: #f6c453;
+      color: #18203a;
+      font: inherit;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 3px 0 #bc8720;
+    }
+    button:active { transform: translateY(2px); box-shadow: 0 1px 0 #bc8720; }
+    .controls { display: flex; justify-content: center; gap: 18px; margin-top: 14px; }
+    .controls button { width: 76px; font-size: 1.5rem; padding: 8px; }
+    .tip { margin: 14px 0 0; color: #d6ddf0; font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>💩 똥 피하기</h1>
+    <div class="hud"><span>점수: <strong id="score">0</strong></span><span>최고: <strong id="best">0</strong></span></div>
+    <section id="game" aria-label="똥 피하기 게임판">
+      <div id="player" aria-label="플레이어">🧍</div>
+      <div id="message">
+        <div class="card">
+          <h2>똥 피하기!</h2>
+          <p>떨어지는 똥을 피해 보세요.<br>매초 똥 1개가 떨어집니다.</p>
+          <button id="startButton" type="button">게임 시작</button>
+        </div>
+      </div>
+    </section>
+    <div class="controls" aria-label="이동 버튼">
+      <button id="leftButton" type="button" aria-label="왼쪽으로 이동">◀</button>
+      <button id="rightButton" type="button" aria-label="오른쪽으로 이동">▶</button>
+    </div>
+    <p class="tip">키보드 ← → 또는 A / D 키로 이동할 수 있어요.</p>
+  </main>
+
+  <script>
+    (() => {
+      const game = document.querySelector('#game');
+      const player = document.querySelector('#player');
+      const message = document.querySelector('#message');
+      const scoreEl = document.querySelector('#score');
+      const bestEl = document.querySelector('#best');
+      const startButton = document.querySelector('#startButton');
+      const leftButton = document.querySelector('#leftButton');
+      const rightButton = document.querySelector('#rightButton');
+
+      let running = false;
+      let playerX = 0;
+      let score = 0;
+      let lastTime = 0;
+      let spawnTimer = 0;
+      let animationId = 0;
+      let droppings = [];
+      let best = Number(localStorage.getItem('dungDodgeBest') || 0);
+      bestEl.textContent = best;
+
+      function positionPlayer() {
+        const maxX = game.clientWidth - player.offsetWidth;
+        playerX = Math.max(0, Math.min(maxX, playerX));
+        player.style.left = playerX + 'px';
+        player.style.transform = 'none';
+      }
+
+      function spawnDung() {
+        const dung = document.createElement('div');
+        dung.className = 'dung';
+        dung.textContent = '💩';
+        game.appendChild(dung);
+        const x = Math.random() * (game.clientWidth - 42);
+        droppings.push({ el: dung, x, y: -48, speed: 190 + Math.min(score * 2, 110) });
+        dung.style.left = x + 'px';
+      }
+
+      function overlaps(a, b) {
+        return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+      }
+
+      function endGame() {
+        running = false;
+        cancelAnimationFrame(animationId);
+        best = Math.max(best, score);
+        localStorage.setItem('dungDodgeBest', best);
+        bestEl.textContent = best;
+        message.innerHTML = `<div class="card"><h2>게임 오버!</h2><p>최종 점수는 <strong>${score}점</strong>입니다.</p><button id="restartButton" type="button">다시 시작</button></div>`;
+        message.classList.remove('hidden');
+        document.querySelector('#restartButton').addEventListener('click', startGame);
+      }
+
+      function update(time) {
+        if (!running) return;
+        const dt = Math.min((time - lastTime) / 1000, 0.05);
+        lastTime = time;
+        spawnTimer += dt;
+        while (spawnTimer >= 1) { // 정확히 1초마다 한 개 생성
+          spawnDung();
+          spawnTimer -= 1;
+        }
+        const playerRect = player.getBoundingClientRect();
+        for (let i = droppings.length - 1; i >= 0; i--) {
+          const dung = droppings[i];
+          dung.y += dung.speed * dt;
+          dung.el.style.top = dung.y + 'px';
+          const dungRect = dung.el.getBoundingClientRect();
+          if (overlaps(playerRect, dungRect)) { endGame(); return; }
+          if (dung.y > game.clientHeight) {
+            dung.el.remove();
+            droppings.splice(i, 1);
+            score++;
+            scoreEl.textContent = score;
+          }
+        }
+        animationId = requestAnimationFrame(update);
+      }
+
+      function startGame() {
+        droppings.forEach(d => d.el.remove());
+        droppings = [];
+        score = 0;
+        scoreEl.textContent = score;
+        spawnTimer = 0;
+        playerX = (game.clientWidth - player.offsetWidth) / 2;
+        positionPlayer();
+        message.classList.add('hidden');
+        running = true;
+        lastTime = performance.now();
+        animationId = requestAnimationFrame(update);
+      }
+
+      function move(direction) {
+        if (!running) return;
+        playerX += direction * 34;
+        positionPlayer();
+      }
+
+      document.addEventListener('keydown', event => {
+        if (['ArrowLeft', 'a', 'A'].includes(event.key)) { event.preventDefault(); move(-1); }
+        if (['ArrowRight', 'd', 'D'].includes(event.key)) { event.preventDefault(); move(1); }
+      });
+      leftButton.addEventListener('click', () => move(-1));
+      rightButton.addEventListener('click', () => move(1));
+      startButton.addEventListener('click', startGame);
+      game.addEventListener('pointermove', event => {
+        if (!running || event.pointerType === 'mouse' && event.buttons === 0) return;
+        const bounds = game.getBoundingClientRect();
+        playerX = event.clientX - bounds.left - player.offsetWidth / 2;
+        positionPlayer();
+      });
+      window.addEventListener('resize', positionPlayer);
+      positionPlayer();
+    })();
+  </script>
+</body>
+</html>
