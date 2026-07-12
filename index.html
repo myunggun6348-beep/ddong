@@ -41,7 +41,7 @@
       background: repeating-linear-gradient(90deg, transparent 0 44px, #fff 45px 48px, transparent 49px 94px);
       pointer-events: none;
     }
-    #player, .dung { position: absolute; line-height: 1; }
+    #player, .dung, .item { position: absolute; line-height: 1; }
     #player {
       bottom: 18px;
       left: 50%;
@@ -53,6 +53,7 @@
       z-index: 2;
     }
     .dung { top: -50px; font-size: 37px; filter: drop-shadow(0 2px 1px #0005); }
+    .item { top: -44px; font-size: 32px; z-index: 3; filter: drop-shadow(0 0 7px #fff); }
     #message {
       position: absolute;
       inset: 0;
@@ -98,9 +99,9 @@
     .tip { margin: 12px 0 0; color: #d6ddf0; font-size: .88rem; line-height: 1.5; }
     .leaderboard { margin-top: 18px; padding: 14px 18px; border-radius: 16px; background: #ffffff12; text-align: left; }
     .leaderboard h2 { margin: 0 0 8px; font-size: 1.05rem; text-align: center; }
-    #leaderboardList { margin: 0; padding-left: 28px; }
-    #leaderboardList li { padding: 5px 0; border-bottom: 1px solid #ffffff18; }
-    #leaderboardList li:last-child { border-bottom: 0; }
+    #leaderboardList, #classLeaderboardList { margin: 0; padding-left: 28px; }
+    #leaderboardList li, #classLeaderboardList li { padding: 5px 0; border-bottom: 1px solid #ffffff18; }
+    #leaderboardList li:last-child, #classLeaderboardList li:last-child { border-bottom: 0; }
     .empty-record { list-style: none; margin-left: -20px; color: #bfc9e3; text-align: center; }
     @media (max-width: 480px) {
       body { padding: 8px 0 20px; place-items: start center; }
@@ -119,6 +120,7 @@
     <div class="hud">
       <span>점수: <strong id="score">0</strong></span>
       <span>시간: <strong id="time">0.0</strong>초</span>
+      <span>콤보: <strong id="combo">0</strong></span>
       <span>최고: <strong id="best">0</strong></span>
     </div>
     <section id="game" aria-label="똥 피하기 게임판">
@@ -129,6 +131,7 @@
           <p>똥은 정확히 1초마다 한 개씩 떨어집니다.<br>난이도에 따라 낙하 속도가 달라져요.</p>
           <div class="setup-fields">
             <label for="playerName">이름 <input id="playerName" type="text" maxlength="12" placeholder="이름 입력" autocomplete="nickname"></label>
+            <label for="className">반 <input id="className" type="text" maxlength="8" placeholder="예: 2학년 3반"></label>
             <label for="difficulty">난이도 <strong><span id="difficultyValue">5</span>/10</strong></label>
             <input id="difficulty" type="range" min="1" max="10" value="5" step="1">
           </div>
@@ -136,6 +139,7 @@
         </div>
       </div>
     </section>
+    <p id="powerStatus" class="tip" aria-live="polite">5콤보마다 점수 배수가 올라갑니다. 방패와 슬로 아이템을 잡아보세요!</p>
     <div class="actions" aria-label="게임 관리 버튼">
       <button id="pauseButton" type="button" disabled>일시정지</button>
       <button id="resetBest" type="button">기록 초기화</button>
@@ -152,6 +156,11 @@
       <p id="leaderboardStatus" class="tip" aria-live="polite"></p>
       <ol id="leaderboardList"></ol>
     </section>
+    <section class="leaderboard" aria-label="반별 대항전 순위표">
+      <h2>🏫 반별 대항전 TOP 5</h2>
+      <p class="tip">반별 상위 5명의 최고 점수를 합산합니다.</p>
+      <ol id="classLeaderboardList"></ol>
+    </section>
   </main>
 
   <script>
@@ -162,12 +171,16 @@
       const scoreEl = document.querySelector('#score');
       const timeEl = document.querySelector('#time');
       const bestEl = document.querySelector('#best');
+      const comboEl = document.querySelector('#combo');
+      const powerStatusEl = document.querySelector('#powerStatus');
       const difficultyEl = document.querySelector('#difficulty');
       const difficultyValueEl = document.querySelector('#difficultyValue');
       const playerNameEl = document.querySelector('#playerName');
+      const classNameEl = document.querySelector('#className');
       const leaderboardList = document.querySelector('#leaderboardList');
       const leaderboardTitle = document.querySelector('#leaderboardTitle');
       const leaderboardStatus = document.querySelector('#leaderboardStatus');
+      const classLeaderboardList = document.querySelector('#classLeaderboardList');
       const startButton = document.querySelector('#startButton');
       const pauseButton = document.querySelector('#pauseButton');
       const resetBestButton = document.querySelector('#resetBest');
@@ -183,8 +196,14 @@
       let elapsed = 0;
       let lastTime = 0;
       let spawnTimer = 0;
+      let itemTimer = 0;
       let animationId = 0;
       let droppings = [];
+      let items = [];
+      let combo = 0;
+      let maxCombo = 0;
+      let shield = false;
+      let slowUntil = 0;
       const pressed = { left: false, right: false };
       let best = Number(localStorage.getItem('dungDodgeBest') || 0);
       let records = loadRecords();
@@ -195,7 +214,9 @@
       const onlineMode = location.protocol === 'https:' || location.protocol === 'http:';
       bestEl.textContent = best;
       playerNameEl.value = localStorage.getItem('dungDodgePlayerName') || '';
+      classNameEl.value = localStorage.getItem('dungDodgeClassName') || '';
       renderLeaderboard();
+      renderClassLeaderboard();
       soundButton.textContent = soundEnabled ? '🔊 소리 켜짐' : '🔇 소리 꺼짐';
       if (onlineMode) {
         leaderboardTitle.textContent = '🌐 전체 공용 기록 TOP 10';
@@ -248,6 +269,41 @@
         });
       }
 
+      function renderClassLeaderboard() {
+        classLeaderboardList.replaceChildren();
+        const playerBests = new Map();
+        records.forEach(record => {
+          const className = String(record.className || '').trim();
+          if (!className) return;
+          const key = `${className}::${record.name}`;
+          playerBests.set(key, Math.max(playerBests.get(key) || 0, Number(record.score) || 0));
+        });
+        const classes = new Map();
+        playerBests.forEach((playerScore, key) => {
+          const className = key.split('::')[0];
+          const scores = classes.get(className) || [];
+          scores.push(playerScore);
+          classes.set(className, scores);
+        });
+        const rankings = [...classes].map(([className, scores]) => ({
+          className,
+          score: scores.sort((a, b) => b - a).slice(0, 5).reduce((sum, value) => sum + value, 0),
+          players: scores.length
+        })).sort((a, b) => b.score - a.score).slice(0, 5);
+        if (!rankings.length) {
+          const empty = document.createElement('li');
+          empty.className = 'empty-record';
+          empty.textContent = '반 이름을 입력하고 첫 기록을 만들어 보세요.';
+          classLeaderboardList.appendChild(empty);
+          return;
+        }
+        rankings.forEach(team => {
+          const item = document.createElement('li');
+          item.textContent = `${team.className} · ${team.score}점 · ${team.players}명`;
+          classLeaderboardList.appendChild(item);
+        });
+      }
+
       async function refreshOnlineRecords() {
         leaderboardStatus.textContent = '공용 기록을 불러오는 중…';
         try {
@@ -265,12 +321,15 @@
       async function saveRecord() {
         const name = playerNameEl.value.trim() || '익명';
         localStorage.setItem('dungDodgePlayerName', name);
-        const record = { name, score, level: currentDifficulty().level, time: Number(elapsed.toFixed(1)) };
+        const className = classNameEl.value.trim() || '자유팀';
+        localStorage.setItem('dungDodgeClassName', className);
+        const record = { name, className, score, level: currentDifficulty().level, time: Number(elapsed.toFixed(1)) };
         records.push(record);
         records.sort((a, b) => b.score - a.score || b.level - a.level || Number(b.time) - Number(a.time));
-        records = records.slice(0, 10);
+        records = records.slice(0, 100);
         localStorage.setItem('dungDodgeRecords', JSON.stringify(records));
         renderLeaderboard();
+        renderClassLeaderboard();
         if (!onlineMode) return;
         leaderboardStatus.textContent = '공용 기록을 저장하는 중…';
         try {
@@ -295,6 +354,29 @@
         droppings.push({ el: dung, x, y: -48, speed: currentDifficulty().speed + Math.min(elapsed * 4, 180) });
         dung.style.left = x + 'px';
         playTone(180, 0.08, 'square');
+      }
+
+      function spawnItem() {
+        const type = Math.random() < 0.5 ? 'shield' : 'slow';
+        const item = document.createElement('div');
+        item.className = 'item';
+        item.textContent = type === 'shield' ? '🛡️' : '⏳';
+        game.appendChild(item);
+        const x = Math.random() * Math.max(1, game.clientWidth - 40);
+        items.push({ el: item, type, x, y: -44, speed: 105 });
+        item.style.left = x + 'px';
+      }
+
+      function collectItem(item) {
+        if (item.type === 'shield') {
+          shield = true;
+          powerStatusEl.textContent = '🛡️ 방패 준비! 똥 충돌을 한 번 막아줍니다.';
+          playTone(660, 0.22, 'sine');
+        } else {
+          slowUntil = elapsed + 5;
+          powerStatusEl.textContent = '⏳ 5초 동안 똥이 느려집니다!';
+          playTone(520, 0.25, 'triangle');
+        }
       }
 
       function playTone(frequency, duration, type = 'sine') {
@@ -349,7 +431,7 @@
 
       function showGameOver() {
         const level = currentDifficulty().label;
-        message.innerHTML = `<div class="card"><h2>게임 오버!</h2><p>${level} 난이도에서 <strong>${score}점</strong><br>생존 시간: <strong>${elapsed.toFixed(1)}초</strong></p><div class="card-actions"><button id="restartButton" type="button">다시 시작 (R 또는 Enter)</button><button id="shareButton" type="button">기록 공유</button></div></div>`;
+        message.innerHTML = `<div class="card"><h2>게임 오버!</h2><p>${level} 난이도에서 <strong>${score}점</strong><br>최대 콤보: <strong>${maxCombo}</strong><br>생존 시간: <strong>${elapsed.toFixed(1)}초</strong></p><div class="card-actions"><button id="restartButton" type="button">다시 시작 (R 또는 Enter)</button><button id="shareButton" type="button">기록 공유</button></div></div>`;
         message.classList.remove('hidden');
         document.querySelector('#restartButton').addEventListener('click', startGame);
         document.querySelector('#shareButton').addEventListener('click', shareResult);
@@ -398,6 +480,7 @@
         pauseButton.textContent = '일시정지';
         difficultyEl.disabled = false;
         playerNameEl.disabled = false;
+        classNameEl.disabled = false;
         pressed.left = false;
         pressed.right = false;
         best = Math.max(best, score);
@@ -418,6 +501,11 @@
           spawnDung();
           spawnTimer -= 1;
         }
+        itemTimer += dt;
+        while (itemTimer >= 10) {
+          spawnItem();
+          itemTimer -= 10;
+        }
         const direction = Number(pressed.right) - Number(pressed.left);
         if (direction) {
           playerX += direction * currentDifficulty().move * dt;
@@ -427,16 +515,49 @@
         const playerRect = hitbox(player.getBoundingClientRect(), 11, 8);
         for (let i = droppings.length - 1; i >= 0; i--) {
           const dung = droppings[i];
-          dung.y += dung.speed * dt;
+          const slowFactor = elapsed < slowUntil ? 0.45 : 1;
+          dung.y += dung.speed * slowFactor * dt;
           dung.el.style.top = dung.y + 'px';
           const dungRect = hitbox(dung.el.getBoundingClientRect(), 8, 6);
-          if (overlaps(playerRect, dungRect)) { endGame(); return; }
+          if (overlaps(playerRect, dungRect)) {
+            if (shield) {
+              shield = false;
+              dung.el.remove();
+              droppings.splice(i, 1);
+              powerStatusEl.textContent = '🛡️ 방패가 충돌을 막았습니다!';
+              playTone(240, 0.2, 'square');
+              continue;
+            }
+            endGame();
+            return;
+          }
           if (dung.y > game.clientHeight) {
             dung.el.remove();
             droppings.splice(i, 1);
-            score += currentDifficulty().level;
+            combo += 1;
+            maxCombo = Math.max(maxCombo, combo);
+            const multiplier = Math.min(5, 1 + Math.floor(combo / 5));
+            score += currentDifficulty().level * multiplier;
             scoreEl.textContent = score;
+            comboEl.textContent = `${combo} ×${multiplier}`;
           }
+        }
+        for (let i = items.length - 1; i >= 0; i--) {
+          const item = items[i];
+          item.y += item.speed * dt;
+          item.el.style.top = item.y + 'px';
+          const itemRect = hitbox(item.el.getBoundingClientRect(), 4, 4);
+          if (overlaps(playerRect, itemRect)) {
+            collectItem(item);
+            item.el.remove();
+            items.splice(i, 1);
+          } else if (item.y > game.clientHeight) {
+            item.el.remove();
+            items.splice(i, 1);
+          }
+        }
+        if (slowUntil && elapsed >= slowUntil && powerStatusEl.textContent.includes('느려')) {
+          powerStatusEl.textContent = shield ? '🛡️ 방패 준비!' : '아이템 효과가 끝났습니다.';
         }
         animationId = requestAnimationFrame(update);
       }
@@ -444,11 +565,20 @@
       function startGame() {
         droppings.forEach(dung => dung.el.remove());
         droppings = [];
+        items.forEach(item => item.el.remove());
+        items = [];
         score = 0;
         elapsed = 0;
+        combo = 0;
+        maxCombo = 0;
+        shield = false;
+        slowUntil = 0;
         scoreEl.textContent = '0';
         timeEl.textContent = '0.0';
+        comboEl.textContent = '0';
         spawnTimer = 0;
+        itemTimer = 0;
+        powerStatusEl.textContent = '5콤보마다 점수 배수가 올라갑니다. 방패와 슬로 아이템을 잡아보세요!';
         playerX = (game.clientWidth - player.offsetWidth) / 2;
         positionPlayer();
         message.classList.add('hidden');
@@ -459,7 +589,9 @@
         pauseButton.textContent = '일시정지';
         difficultyEl.disabled = true;
         playerNameEl.disabled = true;
+        classNameEl.disabled = true;
         localStorage.setItem('dungDodgePlayerName', playerNameEl.value.trim());
+        localStorage.setItem('dungDodgeClassName', classNameEl.value.trim());
         lastTime = performance.now();
         animationId = requestAnimationFrame(update);
       }
@@ -488,6 +620,7 @@
         localStorage.removeItem('dungDodgeRecords');
         bestEl.textContent = '0';
         renderLeaderboard();
+        renderClassLeaderboard();
       }
 
       document.addEventListener('keydown', event => {
