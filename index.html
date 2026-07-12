@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>똥 피하기</title>
+  <title>똥 피하기 게임</title>
   <style>
     :root { color-scheme: dark; }
     * { box-sizing: border-box; }
@@ -12,19 +12,21 @@
       min-height: 100vh;
       display: grid;
       place-items: center;
+      padding: 20px 0;
       background: linear-gradient(145deg, #14213d, #0d1326 72%);
       color: #fff;
       font-family: system-ui, -apple-system, "Noto Sans KR", sans-serif;
       user-select: none;
     }
-    .wrap { width: min(92vw, 500px); text-align: center; }
+    .wrap { width: min(92vw, 520px); text-align: center; }
     h1 { margin: 0 0 12px; font-size: clamp(1.8rem, 6vw, 2.6rem); }
-    .hud { display: flex; justify-content: space-between; margin: 0 4px 10px; font-weight: 800; }
+    .hud { display: flex; justify-content: space-between; gap: 8px; margin: 0 4px 10px; font-weight: 800; }
+    .hud span { flex: 1; }
     #game {
       position: relative;
       overflow: hidden;
-      height: min(68vh, 620px);
-      min-height: 390px;
+      height: min(62vh, 570px);
+      min-height: 360px;
       border: 4px solid #f6c453;
       border-radius: 18px;
       background: linear-gradient(#72c9ff 0 72%, #61b84c 72%);
@@ -58,16 +60,23 @@
       display: grid;
       place-items: center;
       padding: 24px;
-      background: #101a31c9;
+      background: #101a31d2;
     }
     #message.hidden { display: none; }
-    .card { max-width: 320px; }
+    .card { max-width: 340px; }
     .card h2 { margin: 0 0 10px; font-size: 2rem; }
     .card p { margin: 0 0 18px; line-height: 1.65; }
-    button {
+    .card-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 9px; }
+    .difficulty-bar, .player-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 0 4px 10px; padding: 8px 12px; border-radius: 12px; background: #ffffff14; font-weight: 800; }
+    .setup-fields { display: grid; gap: 10px; margin: 16px 0; text-align: left; }
+    .setup-fields label { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 800; }
+    .setup-fields input[type="text"] { flex: 1; width: auto; }
+    .setup-fields input[type="range"] { flex: 1; }
+    .difficulty-bar label { white-space: nowrap; }
+    input, button {
       border: 0;
       border-radius: 12px;
-      padding: 12px 18px;
+      padding: 11px 14px;
       background: #f6c453;
       color: #18203a;
       font: inherit;
@@ -75,31 +84,72 @@
       cursor: pointer;
       box-shadow: 0 3px 0 #bc8720;
     }
+    input { min-width: 0; box-shadow: none; }
+    input[type="text"] { width: 180px; background: #fff; }
+    input[type="range"] { width: 100%; padding: 0; accent-color: #f6c453; box-shadow: none; }
     button:active { transform: translateY(2px); box-shadow: 0 1px 0 #bc8720; }
-    .controls { display: flex; justify-content: center; gap: 18px; margin-top: 14px; }
-    .controls button { width: 76px; font-size: 1.5rem; padding: 8px; }
-    .tip { margin: 14px 0 0; color: #d6ddf0; font-size: .9rem; }
+    button:disabled { cursor: not-allowed; opacity: .5; transform: none; box-shadow: 0 3px 0 #bc8720; }
+    .actions, .controls { display: flex; justify-content: center; gap: 10px; margin-top: 12px; }
+    .actions button { flex: 1; }
+    .controls { gap: 18px; margin-top: 14px; }
+    .controls button { width: 92px; min-height: 54px; font-size: 1.5rem; padding: 8px; touch-action: none; }
+    #resetBest { background: #d9e3ff; box-shadow: 0 3px 0 #8294c7; }
+    .tip { margin: 12px 0 0; color: #d6ddf0; font-size: .88rem; line-height: 1.5; }
+    .leaderboard { margin-top: 18px; padding: 14px 18px; border-radius: 16px; background: #ffffff12; text-align: left; }
+    .leaderboard h2 { margin: 0 0 8px; font-size: 1.05rem; text-align: center; }
+    #leaderboardList { margin: 0; padding-left: 28px; }
+    #leaderboardList li { padding: 5px 0; border-bottom: 1px solid #ffffff18; }
+    #leaderboardList li:last-child { border-bottom: 0; }
+    .empty-record { list-style: none; margin-left: -20px; color: #bfc9e3; text-align: center; }
+    @media (max-width: 480px) {
+      body { padding: 8px 0 20px; place-items: start center; }
+      .wrap { width: 96vw; }
+      h1 { margin-bottom: 8px; }
+      #game { height: 58vh; min-height: 350px; }
+      .difficulty-bar, .player-bar { padding: 8px 10px; }
+      input[type="text"] { width: 150px; }
+      .controls button { flex: 1; max-width: 150px; min-height: 62px; }
+    }
   </style>
 </head>
 <body>
   <main class="wrap">
     <h1>💩 똥 피하기</h1>
-    <div class="hud"><span>점수: <strong id="score">0</strong></span><span>최고: <strong id="best">0</strong></span></div>
+    <div class="hud">
+      <span>점수: <strong id="score">0</strong></span>
+      <span>시간: <strong id="time">0.0</strong>초</span>
+      <span>최고: <strong id="best">0</strong></span>
+    </div>
     <section id="game" aria-label="똥 피하기 게임판">
       <div id="player" aria-label="플레이어">🧍</div>
       <div id="message">
         <div class="card">
           <h2>똥 피하기!</h2>
-          <p>떨어지는 똥을 피해 보세요.<br>매초 똥 1개가 떨어집니다.</p>
+          <p>똥은 정확히 1초마다 한 개씩 떨어집니다.<br>난이도에 따라 낙하 속도가 달라져요.</p>
+          <div class="setup-fields">
+            <label for="playerName">이름 <input id="playerName" type="text" maxlength="12" placeholder="이름 입력" autocomplete="nickname"></label>
+            <label for="difficulty">난이도 <strong><span id="difficultyValue">5</span>/10</strong></label>
+            <input id="difficulty" type="range" min="1" max="10" value="5" step="1">
+          </div>
           <button id="startButton" type="button">게임 시작</button>
         </div>
       </div>
     </section>
+    <div class="actions" aria-label="게임 관리 버튼">
+      <button id="pauseButton" type="button" disabled>일시정지</button>
+      <button id="resetBest" type="button">기록 초기화</button>
+      <button id="soundButton" type="button">🔊 소리 켜짐</button>
+    </div>
     <div class="controls" aria-label="이동 버튼">
       <button id="leftButton" type="button" aria-label="왼쪽으로 이동">◀</button>
       <button id="rightButton" type="button" aria-label="오른쪽으로 이동">▶</button>
     </div>
-    <p class="tip">키보드 ← → 또는 A / D 키로 이동할 수 있어요.</p>
+    <p class="tip">← → 또는 A / D: 이동 · P: 일시정지 · 게임 오버 뒤 R 또는 Enter: 다시 시작<br>화면을 드래그해도 이동할 수 있어요.</p>
+    <section class="leaderboard" aria-label="게임 기록표">
+      <h2 id="leaderboardTitle">🏆 이 기기의 기록 TOP 10</h2>
+      <p id="leaderboardStatus" class="tip" aria-live="polite"></p>
+      <ol id="leaderboardList"></ol>
+    </section>
   </main>
 
   <script>
@@ -108,20 +158,46 @@
       const player = document.querySelector('#player');
       const message = document.querySelector('#message');
       const scoreEl = document.querySelector('#score');
+      const timeEl = document.querySelector('#time');
       const bestEl = document.querySelector('#best');
+      const difficultyEl = document.querySelector('#difficulty');
+      const difficultyValueEl = document.querySelector('#difficultyValue');
+      const playerNameEl = document.querySelector('#playerName');
+      const leaderboardList = document.querySelector('#leaderboardList');
+      const leaderboardTitle = document.querySelector('#leaderboardTitle');
+      const leaderboardStatus = document.querySelector('#leaderboardStatus');
       const startButton = document.querySelector('#startButton');
+      const pauseButton = document.querySelector('#pauseButton');
+      const resetBestButton = document.querySelector('#resetBest');
+      const soundButton = document.querySelector('#soundButton');
       const leftButton = document.querySelector('#leftButton');
       const rightButton = document.querySelector('#rightButton');
 
       let running = false;
+      let paused = false;
       let playerX = 0;
       let score = 0;
+      let elapsed = 0;
       let lastTime = 0;
       let spawnTimer = 0;
       let animationId = 0;
       let droppings = [];
+      const pressed = { left: false, right: false };
       let best = Number(localStorage.getItem('dungDodgeBest') || 0);
+      let records = loadRecords();
+      let audioContext = null;
+      let musicTimer = 0;
+      let musicStep = 0;
+      let soundEnabled = localStorage.getItem('dungDodgeSound') !== 'off';
+      const onlineMode = location.protocol === 'https:' || location.protocol === 'http:';
       bestEl.textContent = best;
+      playerNameEl.value = localStorage.getItem('dungDodgePlayerName') || '';
+      renderLeaderboard();
+      soundButton.textContent = soundEnabled ? '🔊 소리 켜짐' : '🔇 소리 꺼짐';
+      if (onlineMode) {
+        leaderboardTitle.textContent = '🌐 전체 공용 기록 TOP 10';
+        refreshOnlineRecords();
+      }
 
       function positionPlayer() {
         const maxX = game.clientWidth - player.offsetWidth;
@@ -130,51 +206,208 @@
         player.style.transform = 'none';
       }
 
+      function currentDifficulty() {
+        const level = Number(difficultyEl.value);
+        return {
+          level,
+          label: `${level}단계`,
+          speed: 120 + level * 55,
+          move: 310,
+          tapMove: 24 + level
+        };
+      }
+
+      function loadRecords() {
+        try {
+          const saved = JSON.parse(localStorage.getItem('dungDodgeRecords') || '[]');
+          return Array.isArray(saved) ? saved : [];
+        } catch {
+          return [];
+        }
+      }
+
+      function renderLeaderboard() {
+        leaderboardList.replaceChildren();
+        const level = currentDifficulty().level;
+        leaderboardTitle.textContent = `🏆 난이도 ${level}단계 TOP 10`;
+        const levelRecords = records.filter(record => Number(record.level) === level).slice(0, 10);
+        if (!levelRecords.length) {
+          const empty = document.createElement('li');
+          empty.className = 'empty-record';
+          empty.textContent = '아직 저장된 기록이 없습니다.';
+          leaderboardList.appendChild(empty);
+          return;
+        }
+        levelRecords.forEach(record => {
+          const item = document.createElement('li');
+          item.textContent = `${record.name} · ${record.score}점 · 난이도 ${record.level} · ${record.time}초`;
+          leaderboardList.appendChild(item);
+        });
+      }
+
+      async function refreshOnlineRecords() {
+        leaderboardStatus.textContent = '공용 기록을 불러오는 중…';
+        try {
+          const response = await fetch(`/api/scores?level=${currentDifficulty().level}`, { cache: 'no-store' });
+          if (!response.ok) throw new Error('기록 조회 실패');
+          const data = await response.json();
+          records = Array.isArray(data.records) ? data.records : [];
+          renderLeaderboard();
+          leaderboardStatus.textContent = '모든 기기의 기록이 함께 표시됩니다.';
+        } catch {
+          leaderboardStatus.textContent = '공용 기록 연결이 불안정해 이 기기의 기록을 표시합니다.';
+        }
+      }
+
+      async function saveRecord() {
+        const name = playerNameEl.value.trim() || '익명';
+        localStorage.setItem('dungDodgePlayerName', name);
+        const record = { name, score, level: currentDifficulty().level, time: Number(elapsed.toFixed(1)) };
+        records.push(record);
+        records.sort((a, b) => b.score - a.score || b.level - a.level || Number(b.time) - Number(a.time));
+        records = records.slice(0, 10);
+        localStorage.setItem('dungDodgeRecords', JSON.stringify(records));
+        renderLeaderboard();
+        if (!onlineMode) return;
+        leaderboardStatus.textContent = '공용 기록을 저장하는 중…';
+        try {
+          const response = await fetch('/api/scores', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(record)
+          });
+          if (!response.ok) throw new Error('기록 저장 실패');
+          await refreshOnlineRecords();
+        } catch {
+          leaderboardStatus.textContent = '공용 저장에 실패했지만 이 기기에는 기록을 보관했습니다.';
+        }
+      }
+
       function spawnDung() {
         const dung = document.createElement('div');
         dung.className = 'dung';
         dung.textContent = '💩';
         game.appendChild(dung);
         const x = Math.random() * (game.clientWidth - 42);
-        droppings.push({ el: dung, x, y: -48, speed: 190 + Math.min(score * 2, 110) });
+        droppings.push({ el: dung, x, y: -48, speed: currentDifficulty().speed + Math.min(elapsed * 4, 180) });
         dung.style.left = x + 'px';
+        playTone(180, 0.08, 'square');
+      }
+
+      function playTone(frequency, duration, type = 'sine') {
+        if (!soundEnabled) return;
+        audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        oscillator.type = type;
+        oscillator.frequency.value = frequency;
+        gain.gain.setValueAtTime(0.045, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+        oscillator.connect(gain).connect(audioContext.destination);
+        oscillator.start();
+        oscillator.stop(audioContext.currentTime + duration);
+      }
+
+      function startMusic() {
+        if (!soundEnabled) return;
+        audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
+        audioContext.resume?.();
+        clearInterval(musicTimer);
+        const notes = [261.63, 329.63, 392, 329.63, 293.66, 349.23, 440, 349.23];
+        musicStep = 0;
+        musicTimer = setInterval(() => playTone(notes[musicStep++ % notes.length], 0.18, 'triangle'), 420);
+      }
+
+      function stopMusic() {
+        clearInterval(musicTimer);
+        musicTimer = 0;
+      }
+
+      function toggleSound() {
+        soundEnabled = !soundEnabled;
+        localStorage.setItem('dungDodgeSound', soundEnabled ? 'on' : 'off');
+        soundButton.textContent = soundEnabled ? '🔊 소리 켜짐' : '🔇 소리 꺼짐';
+        if (soundEnabled && running) startMusic();
+        else stopMusic();
+      }
+
+      function hitbox(rect, insetX, insetY) {
+        return {
+          left: rect.left + insetX,
+          right: rect.right - insetX,
+          top: rect.top + insetY,
+          bottom: rect.bottom - insetY
+        };
       }
 
       function overlaps(a, b) {
         return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
       }
 
+      function showGameOver() {
+        const level = currentDifficulty().label;
+        message.innerHTML = `<div class="card"><h2>게임 오버!</h2><p>${level} 난이도에서 <strong>${score}점</strong><br>생존 시간: <strong>${elapsed.toFixed(1)}초</strong></p><div class="card-actions"><button id="restartButton" type="button">다시 시작 (R 또는 Enter)</button><button id="shareButton" type="button">기록 공유</button></div></div>`;
+        message.classList.remove('hidden');
+        document.querySelector('#restartButton').addEventListener('click', startGame);
+        document.querySelector('#shareButton').addEventListener('click', shareResult);
+      }
+
+      async function shareResult() {
+        const text = `${playerNameEl.value.trim() || '익명'}님의 똥 피하기 기록: ${score}점 (난이도 ${currentDifficulty().level}, ${elapsed.toFixed(1)}초)`;
+        if (navigator.share) {
+          try { await navigator.share({ title: '똥 피하기 기록', text }); } catch { /* 공유 취소 */ }
+        } else {
+          alert(text);
+        }
+      }
+
       function endGame() {
         running = false;
+        paused = false;
         cancelAnimationFrame(animationId);
+        stopMusic();
+        playTone(90, 0.35, 'sawtooth');
+        pauseButton.disabled = true;
+        pauseButton.textContent = '일시정지';
+        difficultyEl.disabled = false;
+        playerNameEl.disabled = false;
+        pressed.left = false;
+        pressed.right = false;
         best = Math.max(best, score);
         localStorage.setItem('dungDodgeBest', best);
         bestEl.textContent = best;
-        message.innerHTML = `<div class="card"><h2>게임 오버!</h2><p>최종 점수는 <strong>${score}점</strong>입니다.</p><button id="restartButton" type="button">다시 시작</button></div>`;
-        message.classList.remove('hidden');
-        document.querySelector('#restartButton').addEventListener('click', startGame);
+        saveRecord();
+        showGameOver();
       }
 
       function update(time) {
-        if (!running) return;
+        if (!running || paused) return;
         const dt = Math.min((time - lastTime) / 1000, 0.05);
         lastTime = time;
+        elapsed += dt;
+        timeEl.textContent = elapsed.toFixed(1);
         spawnTimer += dt;
-        while (spawnTimer >= 1) { // 정확히 1초마다 한 개 생성
+        while (spawnTimer >= 1) { // 난이도와 관계없이 정확히 1초마다 1개
           spawnDung();
           spawnTimer -= 1;
         }
-        const playerRect = player.getBoundingClientRect();
+        const direction = Number(pressed.right) - Number(pressed.left);
+        if (direction) {
+          playerX += direction * currentDifficulty().move * dt;
+          positionPlayer();
+        }
+        // 이모지의 투명 여백까지 충돌로 판단하지 않도록 실제 보이는 중심부만 사용한다.
+        const playerRect = hitbox(player.getBoundingClientRect(), 11, 8);
         for (let i = droppings.length - 1; i >= 0; i--) {
           const dung = droppings[i];
           dung.y += dung.speed * dt;
           dung.el.style.top = dung.y + 'px';
-          const dungRect = dung.el.getBoundingClientRect();
+          const dungRect = hitbox(dung.el.getBoundingClientRect(), 8, 6);
           if (overlaps(playerRect, dungRect)) { endGame(); return; }
           if (dung.y > game.clientHeight) {
             dung.el.remove();
             droppings.splice(i, 1);
-            score++;
+            score += currentDifficulty().level;
             scoreEl.textContent = score;
           }
         }
@@ -182,34 +415,97 @@
       }
 
       function startGame() {
-        droppings.forEach(d => d.el.remove());
+        droppings.forEach(dung => dung.el.remove());
         droppings = [];
         score = 0;
-        scoreEl.textContent = score;
+        elapsed = 0;
+        scoreEl.textContent = '0';
+        timeEl.textContent = '0.0';
         spawnTimer = 0;
         playerX = (game.clientWidth - player.offsetWidth) / 2;
         positionPlayer();
         message.classList.add('hidden');
         running = true;
+        startMusic();
+        paused = false;
+        pauseButton.disabled = false;
+        pauseButton.textContent = '일시정지';
+        difficultyEl.disabled = true;
+        playerNameEl.disabled = true;
+        localStorage.setItem('dungDodgePlayerName', playerNameEl.value.trim());
         lastTime = performance.now();
         animationId = requestAnimationFrame(update);
       }
 
-      function move(direction) {
+      function togglePause() {
         if (!running) return;
-        playerX += direction * 34;
+        paused = !paused;
+        pauseButton.textContent = paused ? '계속하기' : '일시정지';
+        if (!paused) {
+          lastTime = performance.now();
+          animationId = requestAnimationFrame(update);
+        }
+      }
+
+      function move(direction) {
+        if (!running || paused) return;
+        playerX += direction * currentDifficulty().tapMove;
         positionPlayer();
       }
 
+      function resetBest() {
+        if (!confirm('최고 점수와 이 기기의 기록표를 모두 초기화할까요?')) return;
+        best = 0;
+        records = [];
+        localStorage.removeItem('dungDodgeBest');
+        localStorage.removeItem('dungDodgeRecords');
+        bestEl.textContent = '0';
+        renderLeaderboard();
+      }
+
       document.addEventListener('keydown', event => {
-        if (['ArrowLeft', 'a', 'A'].includes(event.key)) { event.preventDefault(); move(-1); }
-        if (['ArrowRight', 'd', 'D'].includes(event.key)) { event.preventDefault(); move(1); }
+        if (event.target === playerNameEl) {
+          if (event.key === 'Enter' && !running) { event.preventDefault(); startGame(); }
+          return;
+        }
+        const restartButton = document.querySelector('#restartButton');
+        if (!running && restartButton && ['r', 'R', 'Enter'].includes(event.key)) {
+          event.preventDefault();
+          startGame();
+          return;
+        }
+        if (['ArrowLeft', 'a', 'A'].includes(event.key)) { event.preventDefault(); pressed.left = true; }
+        if (['ArrowRight', 'd', 'D'].includes(event.key)) { event.preventDefault(); pressed.right = true; }
+        if (['p', 'P'].includes(event.key)) { event.preventDefault(); togglePause(); }
       });
-      leftButton.addEventListener('click', () => move(-1));
-      rightButton.addEventListener('click', () => move(1));
+      document.addEventListener('keyup', event => {
+        if (['ArrowLeft', 'a', 'A'].includes(event.key)) pressed.left = false;
+        if (['ArrowRight', 'd', 'D'].includes(event.key)) pressed.right = false;
+      });
+      window.addEventListener('blur', () => { pressed.left = false; pressed.right = false; });
       startButton.addEventListener('click', startGame);
+      pauseButton.addEventListener('click', togglePause);
+      resetBestButton.addEventListener('click', resetBest);
+      soundButton.addEventListener('click', toggleSound);
+      difficultyEl.addEventListener('input', () => { difficultyValueEl.textContent = difficultyEl.value; });
+      difficultyEl.addEventListener('input', renderLeaderboard);
+
+      function bindMoveButton(button, side, direction) {
+        button.addEventListener('pointerdown', event => {
+          event.preventDefault();
+          pressed[side] = true;
+          move(direction);
+          button.setPointerCapture?.(event.pointerId);
+        });
+        const release = () => { pressed[side] = false; };
+        button.addEventListener('pointerup', release);
+        button.addEventListener('pointercancel', release);
+        button.addEventListener('lostpointercapture', release);
+      }
+      bindMoveButton(leftButton, 'left', -1);
+      bindMoveButton(rightButton, 'right', 1);
       game.addEventListener('pointermove', event => {
-        if (!running || event.pointerType === 'mouse' && event.buttons === 0) return;
+        if (!running || paused || (event.pointerType === 'mouse' && event.buttons === 0)) return;
         const bounds = game.getBoundingClientRect();
         playerX = event.clientX - bounds.left - player.offsetWidth / 2;
         positionPlayer();
